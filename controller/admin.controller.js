@@ -164,6 +164,12 @@ exports.resetPassword = async (req, res) => {
     admin.password = hashedPassword;
     await admin.save();
 
+    // Store a cookie after successful password reset
+    res.cookie("admin_reset", true, {
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    });
+
     res.status(200).json({ message: "Password reset successfully" });
   } catch (err) {
     console.error("Reset Password Error:", err);

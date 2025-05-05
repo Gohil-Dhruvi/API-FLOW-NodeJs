@@ -148,14 +148,14 @@ exports.forgotPassword = async (req, res) => {
 
 exports.resetPassword = async (req, res) => {
   try {
-    const { employeeId } = req.params;
+    const { adminId } = req.params;
     const { new_pass, confirm_pass } = req.body;
 
     if (new_pass !== confirm_pass) {
       return res.status(400).json({ message: "Passwords do not match" });
     }
 
-    const employee = await Employee.findById(employeeId);
+    const employee = await Employee.findById(adminId);
     if (!employee) {
       return res.status(404).json({ message: "Employee not found" });
     }
@@ -163,6 +163,12 @@ exports.resetPassword = async (req, res) => {
     const hashedPassword = await bcrypt.hash(new_pass, 10);
     employee.password = hashedPassword;
     await employee.save();
+
+    // Store a cookie after successful password reset
+    res.cookie("employee_reset", true, {
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    });
 
     res.status(200).json({ message: "Password reset successfully" });
   } catch (err) {
