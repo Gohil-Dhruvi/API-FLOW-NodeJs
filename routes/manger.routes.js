@@ -2,23 +2,49 @@ const express = require('express');
 const routes = express.Router();
 const uploadImage = require("../middleware/uploadImage");
 const { verifyManagerToken } = require('../middleware/verifyToken');
-const { registerManager, loginManager, myProfile, changePassword , forgotPassword , resetPassword, addEmployee , viewAllEmployee, deleteEmployee , activateEmployee} = require('../controller/manager.controller');
 
+// Controller functions
+const {
+  registerManager,
+  loginManager,
+  logoutManager,
+  myProfile,
+  updateManagerProfile,
+  changePassword,
+  forgotPassword,
+  resetPassword,
+
+  // Employee management
+  addEmployee,
+  viewAllEmployee,
+  getSingleEmployee,
+  updateEmployee,
+  deleteEmployee,
+  activateEmployee,
+  deactivateEmployee
+} = require('../controller/manager.controller');
+
+// Manager Auth Routes
 routes.post("/register", uploadImage.single('profileImage'), registerManager);
+routes.post("/login", loginManager);
+routes.post("/logout", logoutManager);
 
-routes.post("/login", loginManager);   
+// Manager Profile Routes
+routes.get("/profile", verifyManagerToken, myProfile);
+routes.put("/update-profile", verifyManagerToken, uploadImage.single('profileImage'), updateManagerProfile);
 
-routes.get("/profile", verifyManagerToken, myProfile); 
-
+// Password Routes
 routes.post("/change-password", verifyManagerToken, changePassword);
-
 routes.post("/forgot-password", forgotPassword);
 routes.post("/reset-password/:managerId", resetPassword);
 
-routes.post("/add-employee", verifyManagerToken, uploadImage.single('profileImage'), addEmployee)
-routes.get("/view-employee", verifyManagerToken, viewAllEmployee)
-
+// Employee CRUD Routes
+routes.post("/add-employee", verifyManagerToken, uploadImage.single('profileImage'), addEmployee);
+routes.get("/view-employee", verifyManagerToken, viewAllEmployee);
+routes.get("/single-employee/:id", verifyManagerToken, getSingleEmployee);
+routes.put("/update-employee/:id", verifyManagerToken, uploadImage.single('profileImage'), updateEmployee);
 routes.delete("/delete-employee/:id", verifyManagerToken, deleteEmployee);
 routes.put("/activate-employee/:id", verifyManagerToken, activateEmployee);
+routes.post("/deactivate-employee/:id", verifyManagerToken, deactivateEmployee);
 
 module.exports = routes;

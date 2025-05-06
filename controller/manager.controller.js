@@ -5,21 +5,34 @@ const Manager = require("../models/manager.model");
 const Employee = require("../models/employee.model");
 const nodemailer = require("nodemailer");
 
+// Nodemailer setup
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  port: 587,
+  secure: false,
+  auth: {
+    user: "gohildhruvi168529@gmail.com",
+    pass: "yzepdjxowvqfhzvs",
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+});
+
+// ------------------- MANAGER SECTION -------------------
+
 // Register Manager
 exports.registerManager = async (req, res) => {
   try {
     const { firstname, lastname, email, password, gender } = req.body;
-    let imagePath = "";
-    let manager = await Manager.findOne({ email: email, isDelete: false });
+    let imagePath = req.file ? `/uploads/${req.file.filename}` : "";
+    let manager = await Manager.findOne({ email, isDelete: false });
     if (manager) {
       return res.status(400).json({ message: "Manager Already Exist" });
     }
 
-    if (req.file) {
-      imagePath = `/uploads/${req.file.filename}`;
-    }
-    let hashPassword = await bcrypt.hash(password, 10);
-    manager = await Manager.create({
+    const hashPassword = await bcrypt.hash(password, 10);
+    await Manager.create({
       firstname,
       lastname,
       email,
@@ -35,29 +48,37 @@ exports.registerManager = async (req, res) => {
   }
 };
 
-
+// Login Manager
 exports.loginManager = async (req, res) => {
-     try {
+  try {
     const { email, password } = req.body;
-    let manager = await Manager.findOne({ email: email, isDelete: false });
-    if (!manager) {
-      return res.status(404).json({ message: "Manager not found." });
-    }
+    const manager = await Manager.findOne({ email, isDelete: false });
+    if (!manager) return res.status(404).json({ message: "Manager not found" });
 
-    let matchPass = await bcrypt.compare(password, manager.password);
-    if (!matchPass) {
-      return res.status(400).json({ message: "Password is not matched" });
-    }
-    let payload = {
-      managerId: manager._id,
-    };
-    let token = await jwt.sign(payload, "manager");
-    return res
-      .status(200)
-      .json({ message: "Manager Login Success", managerToken: token });
+    const match = await bcrypt.compare(password, manager.password);
+    if (!match) return res.status(400).json({ message: "Password is not matched" });
+
+    const token = jwt.sign({ managerId: manager._id }, "manager");
+    return res.status(200).json({ message: "Manager Login Success", managerToken: token });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Manager Logout
+exports.logoutManager = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      message: "Manager Logout Success"
+    });
+  } catch (error) {
+    console.error("Logout Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
   }
 };
 
@@ -65,41 +86,55 @@ exports.loginManager = async (req, res) => {
 exports.myProfile = async (req, res) => {
   try {
     let manager = req.user;
-    return res.status(200).json({ message: "Profile Success", data: manager });
+    return res.status(200).json({
+      message: "Profile Success",
+      data: manager
+    });
+  } catch (error) {
+    console.error("Profile Error:", error);
+    return res.status(500).json({
+      message: "Internal Server Error"
+    });
+  }
+};
+
+// Update Profile
+exports.updateManagerProfile = async (req, res) => {
+  try {
+    const { firstname, lastname, gender } = req.body;
+    let updateData = {
+      firstname,
+      lastname,
+      gender,
+    };
+
+    if (req.file) {
+      updateData.profileImage = `/uploads/${req.file.filename}`;
+    }
+
+    const manager = await Manager.findByIdAndUpdate(req.user._id, updateData, { new: true });
+    return res.status(200).json({ message: "Profile Update Success", data: manager });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
-// Manager Change-password
+// Change Password
 exports.changePassword = async (req, res) => {
   try {
     const { current_pass, new_pass, confirm_pass } = req.body;
-    let manager = req.user;
-    let matchPass = await bcrypt.compare(current_pass, manager.password);
-    if (!matchPass) {
-      return res
-        .status(400)
-        .json({ message: "Current password is not matched" });
-    }
-    if (current_pass == new_pass) {
-      return res
-        .status(400)
-        .json({ message: "Current password and New password is matched" });
-    }
-    if (new_pass != confirm_pass) {
-      return res
-        .status(400)
-        .json({ message: "New password and Confirm password is not matched" });
+    const manager = req.user;
+
+    const isMatch = await bcrypt.compare(current_pass, manager.password);
+    if (!isMatch) return res.status(400).json({ message: "Current password is incorrect" });
+
+    if (new_pass !== confirm_pass) {
+      return res.status(400).json({ message: "New and Confirm password do not match" });
     }
 
-    let hashPassword = await bcrypt.hash(new_pass, 10);
-    manager = await Manager.findByIdAndUpdate(
-      manager._id,
-      { password: hashPassword },
-      { new: true }
-    );
+    const hashPassword = await bcrypt.hash(new_pass, 10);
+    await Manager.findByIdAndUpdate(manager._id, { password: hashPassword });
 
     return res.status(200).json({ message: "Password Change Success" });
   } catch (error) {
@@ -108,164 +143,165 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "gohildhruvi168529@gmail.com",
-    pass: "yzepdjxowvqfhzvs", 
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
-
+// Forgot Password
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
     const manager = await Manager.findOne({ email });
-
-    if (!manager) {
-      return res.status(404).json({ message: "Manager not found" });
-    }
+    if (!manager) return res.status(404).json({ message: "Manager not found" });
 
     const resetLink = `http://localhost:9005/manager/reset-password/${manager._id}`;
-
     await transporter.sendMail({
       from: '"Manager Support" <gohildhruvi168529@gmail.com>',
       to: email,
       subject: "Reset Your Password",
-      html: `<p>Click the link below to reset your password:</p>
-             <a href="${resetLink}">${resetLink}</a>`,
+      html: `<p>Click the link to reset your password:</p><a href="${resetLink}">${resetLink}</a>`,
     });
 
     res.status(200).json({ message: "Reset link sent to Manager's email" });
-  } catch (err) {
-    console.error("Forgot Password Error:", err);
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
+// Reset Password
 exports.resetPassword = async (req, res) => {
   try {
     const { managerId } = req.params;
     const { new_pass, confirm_pass } = req.body;
-
-    if (new_pass !== confirm_pass) {
-      return res.status(400).json({ message: "Passwords do not match" });
-    }
+    if (new_pass !== confirm_pass) return res.status(400).json({ message: "Passwords do not match" });
 
     const manager = await Manager.findById(managerId);
-    if (!manager) {
-      return res.status(404).json({ message: "Manager not found" });
-    }
+    if (!manager) return res.status(404).json({ message: "Manager not found" });
 
-    const hashedPassword = await bcrypt.hash(new_pass, 10);
-    manager.password = hashedPassword;
+    manager.password = await bcrypt.hash(new_pass, 10);
     await manager.save();
 
-    // Store a cookie after successful password reset
-    res.cookie("manager_reset", true, {
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
-    });
-
+    res.cookie("manager_reset", true, { httpOnly: true, maxAge: 86400000 });
     res.status(200).json({ message: "Password reset successfully" });
-  } catch (err) {
-    console.error("Reset Password Error:", err);
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
+// ------------------- EMPLOYEE SECTION -------------------
+
+// Add Employee
 exports.addEmployee = async (req, res) => {
   try {
-    let { firstname, lastname, email, password, gender, profileImage } =
-      req.body;
-    let employee = await Employee.findOne({ email: email, isDelete: false });
+    const { firstname, lastname, email, password, gender } = req.body;
+    let imagePath = req.file ? `/uploads/${req.file.filename}` : "";
 
-    if (employee) {
-      return res.status(400).json({ message: "Employee already exist" });
-    }
+    const existing = await Employee.findOne({ email, isDelete: false });
+    if (existing) return res.status(400).json({ message: "Employee already exists" });
 
-    if (req.file) {
-      profileImage = `/uploads/${req.file.filename}`;
-    }
-    let hashPassword = await bcrypt.hash(password, 10);
-
-    employee = await Employee.create({
+    const hashPassword = await bcrypt.hash(password, 10);
+    const newEmployee = await Employee.create({
       firstname,
       lastname,
       email,
       gender,
       password: hashPassword,
-      profileImage,
+      profileImage: imagePath,
     });
-    await sendMail(email, password);
-    return res.status(201).json({ message: "New Employee Added Success" });
+
+    res.status(201).json({ message: "New Employee Added Success", data: newEmployee });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
+// View All Employees
 exports.viewAllEmployee = async (req, res) => {
   try {
-    let employees = await Employee.find({ isDelete: false });
-    res.cookie("hello", "employee");
-    res.cookie("hello1", "employee");
-    return res
-      .status(200)
-      .json({ message: "All Employee Fetch Success", data: employees });
+    const employees = await Employee.find({ isDelete: false });
+    res.status(200).json({ message: "All Employee Fetch Success", data: employees });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
+// Get Single Employee
+exports.getSingleEmployee = async (req, res) => {
+  try {
+    const employee = await Employee.findOne({ _id: req.params.id, isDelete: false });
+    if (!employee) return res.status(404).json({ message: "Employee not found" });
+
+    res.status(200).json({ message: "Employee Fetched", data: employee });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Update Employee
+exports.updateEmployee = async (req, res) => {
+  try {
+    const { firstname, lastname, gender } = req.body;
+    let imagePath = req.file ? `/uploads/${req.file.filename}` : undefined;
+
+    const updateData = { firstname, lastname, gender };
+    if (imagePath) updateData.profileImage = imagePath;
+
+    const updated = await Employee.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    res.status(200).json({ message: "Employee Updated", data: updated });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Delete Employee (Soft Delete)
 exports.deleteEmployee = async (req, res) => {
   try {
-    let id = req.params.id;
-    let employee = await Employee.findOne({ _id: id, isDelete: false });
-    if (!employee) {
-      return res.status(404).json({ message: "Employee Not Found" });
-    }
-    employee = await Employee.findByIdAndUpdate(
-      id,
-      { isDelete: true },
-      { new: true }
-    );
-    return res.status(200).json({ message: "Delete Success" });
+    const id = req.params.id;
+    const employee = await Employee.findOne({ _id: id, isDelete: false });
+    if (!employee) return res.status(404).json({ message: "Employee Not Found" });
+
+    await Employee.findByIdAndUpdate(id, { isDelete: true });
+    res.status(200).json({ message: "Employee Deleted Successfully" });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
-
+// Activate Employee
 exports.activateEmployee = async (req, res) => {
   try {
-    let id = req.params.id;
-    // let employee = await Employee.findOne({ _id: id, isDelete: true });
-    // if (!employee) {
-    //   return res.status(404).json({ message: "Employee Not Found || Employee already Activated" });
-    // }
-    let employee = await Employee.findById(id);
-    if(!employee){
-      return res.status(404).json({ message: "Employee Not Found" });
-    }
-    if(employee.isDelete == false){
-      return res.status(404).json({ message: "Employee already Activated" });
-    }
-    employee = await Employee.findByIdAndUpdate(
-      id,
-      { isDelete: false },
-      { new: true }
-    );
-    return res.status(200).json({ message: "Employee is Activated Success" });
+    const id = req.params.id;
+    const employee = await Employee.findById(id);
+    if (!employee) return res.status(404).json({ message: "Employee Not Found" });
+    if (!employee.isDelete) return res.status(400).json({ message: "Employee Already Active" });
+
+    employee.isDelete = false;
+    await employee.save();
+
+    res.status(200).json({ message: "Employee Activated Successfully" });
   } catch (error) {
     console.log(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Deactivate Employee
+exports.deactivateEmployee = async (req, res) => {
+  try {
+    const id = req.params.id;
+    const employee = await Employee.findById(id);
+    if (!employee) return res.status(404).json({ message: "Employee Not Found" });
+    if (employee.isDelete) return res.status(400).json({ message: "Employee Already Deactivated" });
+
+    employee.isDelete = true;
+    await employee.save();
+
+    res.status(200).json({ message: "Employee Deactivated Successfully" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };

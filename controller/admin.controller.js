@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken");
 const Manager = require("../models/manager.model");
 const nodemailer = require("nodemailer");
 
+// Admin Controller Code
+
 // Register Admin
 exports.registerAdmin = async (req, res) => {
   try {
@@ -60,6 +62,22 @@ exports.loginAdmin = async (req, res) => {
   }
 };
 
+// Admin Logout
+exports.logoutAdmin = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      message: "Admin Logout Success"
+    });
+  } catch (error) {
+    console.error("Logout Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error"
+    });
+  }
+};
+
 // Admin Profile
 exports.myProfile = async (req, res) => {
   try {
@@ -67,6 +85,28 @@ exports.myProfile = async (req, res) => {
     return res.status(200).json({ message: "Profile Success", data: admin });
   } catch (error) {
     console.log(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Update Admin Profile
+exports.updateAdminProfile = async (req, res) => {
+  try {
+    const { firstname, lastname, gender } = req.body;
+    let updateData = {
+      firstname,
+      lastname,
+      gender,
+    };
+
+    if (req.file) {
+      updateData.profileImage = `/uploads/${req.file.filename}`;
+    }
+
+    const admin = await Admin.findByIdAndUpdate(req.user._id, updateData, { new: true });
+    return res.status(200).json({ message: "Profile Update Success", data: admin });
+  } catch (error) {
+    console.error("Update Profile Error:", error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
@@ -107,19 +147,7 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  port: 587,
-  secure: false,
-  auth: {
-    user: "gohildhruvi168529@gmail.com",
-    pass: "yzepdjxowvqfhzvs", 
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-});
-
+// Admin forgot-password
 exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -146,6 +174,7 @@ exports.forgotPassword = async (req, res) => {
   }
 };
 
+// Admin reset-password
 exports.resetPassword = async (req, res) => {
   try {
     const { adminId } = req.params;
@@ -164,12 +193,6 @@ exports.resetPassword = async (req, res) => {
     admin.password = hashedPassword;
     await admin.save();
 
-    // Store a cookie after successful password reset
-    res.cookie("admin_reset", true, {
-      httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
-    });
-
     res.status(200).json({ message: "Password reset successfully" });
   } catch (err) {
     console.error("Reset Password Error:", err);
@@ -177,10 +200,12 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// Manager Controller Code
+
+// Add Manager
 exports.addManager = async (req, res) => {
   try {
-    let { firstname, lastname, email, password, gender, profileImage } =
-      req.body;
+    let { firstname, lastname, email, password, gender, profileImage } = req.body;
     let manager = await Manager.findOne({ email: email, isDelete: false });
 
     if (manager) {
@@ -200,7 +225,6 @@ exports.addManager = async (req, res) => {
       password: hashPassword,
       profileImage,
     });
-    await sendMail(email, password);
     return res.status(201).json({ message: "New Manager Added Success" });
   } catch (error) {
     console.log(error);
@@ -208,20 +232,41 @@ exports.addManager = async (req, res) => {
   }
 };
 
+// View All Managers
 exports.viewAllManager = async (req, res) => {
   try {
     let managers = await Manager.find({ isDelete: false });
-    res.cookie("hello", "admin");
-    res.cookie("hello1", "admin");
-    return res
-      .status(200)
-      .json({ message: "All Manager Fetch Success", data: managers });
+    return res.status(200).json({ message: "All Manager Fetch Success", data: managers });
   } catch (error) {
     console.log(error);
     return res.status(500).json({ message: "Internal Server Error" });
   }
 };
 
+// Get Single Manager
+exports.getSingleManager = async (req, res) => {
+  try {
+    const manager = await Manager.findById(req.params.id);
+    if (!manager) return res.status(404).json({ message: "Manager not found" });
+    res.status(200).json({ manager });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Update Manager
+exports.updateManager = async (req, res) => {
+  try {
+    const data = req.body;
+    if (req.file) data.profileImage = req.file.filename;
+    const updated = await Manager.findByIdAndUpdate(req.params.id, data, { new: true });
+    res.status(200).json({ message: "Manager updated", updated });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Delete Manager
 exports.deleteManager = async (req, res) => {
   try {
     let id = req.params.id;
@@ -241,19 +286,15 @@ exports.deleteManager = async (req, res) => {
   }
 };
 
-
+// Activate Manager
 exports.activateManager = async (req, res) => {
   try {
     let id = req.params.id;
-    // let manager = await Manager.findOne({ _id: id, isDelete: true });
-    // if (!manager) {
-    //   return res.status(404).json({ message: "Manager Not Found || Manager already Activated" });
-    // }
     let manager = await Manager.findById(id);
-    if(!manager){
+    if (!manager) {
       return res.status(404).json({ message: "Manager Not Found" });
     }
-    if(manager.isDelete == false){
+    if (manager.isDelete == false) {
       return res.status(404).json({ message: "Manager already Activated" });
     }
     manager = await Manager.findByIdAndUpdate(
@@ -265,5 +306,15 @@ exports.activateManager = async (req, res) => {
   } catch (error) {
     console.log(error);
     return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Deactivate Manager
+exports.deactivateManager = async (req, res) => {
+  try {
+    const updated = await Manager.findByIdAndUpdate(req.params.id, { isActive: false }, { new: true });
+    res.status(200).json({ message: "Manager deactivated", updated });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 };
